@@ -10,8 +10,8 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @run-at       document-idle
-// @updateURL    https://github.com/sgustochka/dozor-helper/blob/main/dozor-helper
-// @downloadURL  https://github.com/sgustochka/dozor-helper/blob/main/dozor-helper
+// @updateURL    https://github.com/sgustochka/dozor-helper/raw/refs/heads/main/dozor-helper.user.js
+// @downloadURL  https://github.com/sgustochka/dozor-helper/raw/refs/heads/main/dozor-helper.user.js
 // ==/UserScript==
 
 (function() {
