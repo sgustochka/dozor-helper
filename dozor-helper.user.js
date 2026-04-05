@@ -311,13 +311,6 @@
         saveBtn.textContent = '✅ Сохранено!';
         setTimeout(() => { saveBtn.textContent = 'Сохранить'; }, 1500);
     };
-
-    return panel;
-}
-
-    return panel;
-}
-
         return panel;
     }
 
