@@ -6,6 +6,8 @@
 // @author       сгусточка и дипсик
 // @match        *://catwar.su/blog14288*
 // @match        *://catwar.net/blog14288*
+// @match        *://catwar.net/blog1172570*
+// @match        *://catwar.su/blog1172570*
 // @icon         https://catwar.net/favicon.ico
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -204,14 +206,127 @@
         const idInput = panel.querySelector('#user_id_input');
         const genderSelect = panel.querySelector('#user_gender_input');
 
-        saveBtn.onclick = () => {
-            userData.name = nameInput.value.trim();
-            userData.id = idInput.value.trim();
-            userData.gender = genderSelect.value;
-            saveUserData();
-            saveBtn.textContent = '✅ Сохранено!';
-            setTimeout(() => { saveBtn.textContent = 'Сохранить'; }, 1500);
-        };
+        function createUserPanel() {
+    const panel = document.createElement('div');
+    panel.style.cssText = 'background-color: ' + COLORS.bgMain + '; border: 1px solid ' + COLORS.border + '; margin: 10px 0; padding: 10px; font-family: ' + FONT_FAMILY + '; color: ' + COLORS.textDark + ';';
+
+    panel.innerHTML = `
+        <div style="background-color: ${COLORS.bgTabActive}; padding: 6px 10px; margin: -10px -10px 10px -10px; font-size: 14px; font-weight: bold; text-align: center; color: ${COLORS.textDark};">👤 Мои данные</div>
+        <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px; align-items: center; font-size: 13px;">
+            <span>Имя:</span>
+            <input type="text" id="user_name_input" placeholder="Ваше имя" value="${userData.name}" style="width: 100%; padding: 4px; font-family: ${FONT_FAMILY};">
+            <span>ID:</span>
+            <input type="text" id="user_id_input" placeholder="Ваш ID" value="${userData.id}" style="width: 100%; padding: 4px; font-family: ${FONT_FAMILY};">
+            <span>Пол:</span>
+            <select id="user_gender_input" style="width: 100%; padding: 4px; font-family: ${FONT_FAMILY};">
+                <option value="male" ${userData.gender === 'male' ? 'selected' : ''}>Мужской</option>
+                <option value="female" ${userData.gender === 'female' ? 'selected' : ''}>Женский</option>
+                <option value="neutral" ${userData.gender === 'neutral' ? 'selected' : ''}>Нейтральный 🧐</option>
+            </select>
+        </div>
+        <div id="auto_fill_status" style="font-size: 11px; color: #2E8B57; margin-top: 5px; text-align: center; display: none;"></div>
+        <button id="save_user_btn" style="width: 100%; margin-top: 10px; padding: 5px; background: ${COLORS.bgTabActive}; color: ${COLORS.textDark}; border: none; cursor: pointer; font-family: ${FONT_FAMILY}; font-weight: bold;">Сохранить</button>
+    `;
+
+    const saveBtn = panel.querySelector('#save_user_btn');
+    const nameInput = panel.querySelector('#user_name_input');
+    const idInput = panel.querySelector('#user_id_input');
+    const genderSelect = panel.querySelector('#user_gender_input');
+    const statusDiv = panel.querySelector('#auto_fill_status');
+
+    saveBtn.onclick = async () => {
+        let name = nameInput.value.trim();
+        let id = idInput.value.trim();
+        
+        // Сбрасываем статус
+        statusDiv.style.display = 'none';
+        
+        // Случай 1: заполнили только имя
+        if (name && !id) {
+            statusDiv.textContent = '🔍 Ищем ID по имени...';
+            statusDiv.style.display = 'block';
+            
+            const convertedId = await convertNameToId(name);
+            if (convertedId) {
+                id = convertedId;
+                idInput.value = id;
+                statusDiv.textContent = '✅ ID найден и добавлен автоматически';
+                setTimeout(() => { statusDiv.style.display = 'none'; }, 2000);
+            } else {
+                alert('❌ Не удалось найти ID по этому имени. Проверьте имя.');
+                return;
+            }
+        }
+        
+        // Случай 2: заполнили только ID
+        if (id && !name) {
+            statusDiv.textContent = '🔍 Ищем имя по ID...';
+            statusDiv.style.display = 'block';
+            
+            const response = await fetch('/ajax/convert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    data: id,
+                    delimiter: ',',
+                    template: '%name%',
+                    type_in: '1',
+                    type_out: '0'
+                })
+            });
+            const resultName = await response.text();
+            if (resultName && resultName.trim()) {
+                name = resultName.trim();
+                nameInput.value = name;
+                statusDiv.textContent = '✅ Имя найдено и добавлено автоматически';
+                setTimeout(() => { statusDiv.style.display = 'none'; }, 2000);
+            } else {
+                alert('❌ Не удалось найти имя по этому ID. Проверьте ID.');
+                return;
+            }
+        }
+        
+        // Случай 3: заполнили оба поля — проверяем соответствие
+        if (name && id) {
+            statusDiv.textContent = '🔍 Проверяем соответствие имени и ID...';
+            statusDiv.style.display = 'block';
+            
+            const checkId = await convertNameToId(name);
+            if (checkId && checkId !== id) {
+                statusDiv.textContent = `⚠️ Имя "${name}" соответствует ID ${checkId}. ID исправлен.`;
+                statusDiv.style.color = '#8B0000';
+                id = checkId;
+                idInput.value = id;
+                setTimeout(() => { 
+                    statusDiv.style.display = 'none';
+                    statusDiv.style.color = '#2E8B57';
+                }, 3000);
+            } else {
+                statusDiv.textContent = '✅ Имя и ID соответствуют друг другу';
+                setTimeout(() => { statusDiv.style.display = 'none'; }, 1500);
+            }
+        }
+        
+        // Случай 4: оба поля пустые
+        if (!name && !id) {
+            alert('❌ Заполните хотя бы одно поле (имя или ID)');
+            return;
+        }
+        
+        // Сохраняем данные
+        userData.name = name;
+        userData.id = id;
+        userData.gender = genderSelect.value;
+        saveUserData();
+        
+        // Визуальный фидбек
+        const originalText = saveBtn.textContent;
+        saveBtn.textContent = '✅ Сохранено!';
+        setTimeout(() => { saveBtn.textContent = originalText; }, 1500);
+    };
+
+    return panel;
+}
 
         return panel;
     }
