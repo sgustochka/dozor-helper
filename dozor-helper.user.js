@@ -179,33 +179,6 @@
 
         return { valid: true, duration: duration };
     }
-
-    function createUserPanel() {
-        const panel = document.createElement('div');
-        panel.style.cssText = 'background-color: ' + COLORS.bgMain + '; border: 1px solid ' + COLORS.border + '; margin: 10px 0; padding: 10px; font-family: ' + FONT_FAMILY + '; color: ' + COLORS.textDark + ';';
-
-        panel.innerHTML = `
-            <div style="background-color: ${COLORS.bgTabActive}; padding: 6px 10px; margin: -10px -10px 10px -10px; font-size: 14px; font-weight: bold; text-align: center; color: ${COLORS.textDark};">Мои данные</div>
-            <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px; align-items: center; font-size: 13px;">
-                <span>Имя:</span>
-                <input type="text" id="user_name_input" placeholder="Ваше имя" value="${userData.name}" style="width: 100%; padding: 4px; font-family: ${FONT_FAMILY};">
-                <span>ID:</span>
-                <input type="text" id="user_id_input" placeholder="Ваш ID" value="${userData.id}" style="width: 100%; padding: 4px; font-family: ${FONT_FAMILY};">
-                <span>Пол:</span>
-                <select id="user_gender_input" style="width: 100%; padding: 4px; font-family: ${FONT_FAMILY};">
-                    <option value="male" ${userData.gender === 'male' ? 'selected' : ''}>Мужской</option>
-                    <option value="female" ${userData.gender === 'female' ? 'selected' : ''}>Женский</option>
-                    <option value="neutral" ${userData.gender === 'neutral' ? 'selected' : ''}>Нейтральный</option>
-                </select>
-            </div>
-            <button id="save_user_btn" style="width: 100%; margin-top: 10px; padding: 5px; background: ${COLORS.bgTabActive}; color: ${COLORS.textDark}; border: none; cursor: pointer; font-family: ${FONT_FAMILY}; font-weight: bold;">Сохранить</button>
-        `;
-
-        const saveBtn = panel.querySelector('#save_user_btn');
-        const nameInput = panel.querySelector('#user_name_input');
-        const idInput = panel.querySelector('#user_id_input');
-        const genderSelect = panel.querySelector('#user_gender_input');
-
         function createUserPanel() {
     const panel = document.createElement('div');
     panel.style.cssText = 'background-color: ' + COLORS.bgMain + '; border: 1px solid ' + COLORS.border + '; margin: 10px 0; padding: 10px; font-family: ' + FONT_FAMILY + '; color: ' + COLORS.textDark + ';';
