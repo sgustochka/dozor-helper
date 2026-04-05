@@ -524,7 +524,7 @@
                 <span>Ваше имя/ID:</span>
                 <input type="text" id="start_name" placeholder="Имя или ID" value="" style="width: 100%; padding: 4px; font-family: ${FONT_FAMILY};">
 
-                <span>Тип дозора:</span>
+                <span>Вид дозора:</span>
                 <select id="start_type" style="width: 100%; padding: 4px; font-family: ${FONT_FAMILY};">
                     <option value="active">Активный</option>
                     <option value="passive">Пассивный</option>
