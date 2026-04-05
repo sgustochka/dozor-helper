@@ -27,7 +27,7 @@
         textDark: '#000000',
         border: '#2E3565',
         warning: '#8B0000',
-        success: '#2E8B57'
+        success: '#000000'
     };
 
     const FONT_FAMILY = 'Georgia, serif';
@@ -53,9 +53,10 @@
     };
 
     function saveUserData() {
-        GM_setValue('user_name', userData.name);
-        GM_setValue('user_id', userData.id);
-        GM_setValue('user_gender', userData.gender);
+    GM_setValue('user_name', userData.name);
+    GM_setValue('user_id', userData.id);
+    GM_setValue('user_gender', userData.gender);
+    GM_setValue('user_isTemp', userData.isTemp);
     }
 
     function getVerbForm(verbType) {
@@ -122,39 +123,52 @@
         return match ? match[1] : '';
     }
 
-    async function getNameAndId(inputField, savedName, savedId) {
-        let name = inputField.value.trim();
-        let id = '';
+    async function getNameAndId(inputField, savedName, savedId, isTemp) {
+    let name = inputField.value.trim();
+    let id = '';
 
-        if (name) {
-            if (name.match(/^\d+$/)) {
-                id = name;
-                const response = await fetch('/ajax/convert', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({
-                        data: name,
-                        delimiter: ',',
-                        template: '%name%',
-                        type_in: '1',
-                        type_out: '0'
-                    })
-                });
-                const resultName = await response.text();
-                name = resultName.trim() || name;
-            } else {
-                const convertedId = await convertNameToId(name);
-                id = convertedId || '';
-            }
-        } else if (savedName || savedId) {
-            name = savedName;
+    // Если поле ввода пустое, берём сохранённые данные
+    if (!name && (savedName || savedId)) {
+        name = savedName;
+        id = savedId;
+        return { name: name, id: id, hasData: true };
+    }
+
+    // Если поле ввода заполнено
+    if (name) {
+        // ВРЕМЕННОЕ ИМЯ — используем сохранённые данные, не лезем в API
+        if (isTemp && savedId) {
+            // Берём ID из сохранённых данных
             id = savedId;
+            return { name: name, id: id, hasData: true };
+        }
+
+        // ПОСТОЯННОЕ ИМЯ — проверяем через API
+        if (name.match(/^\d+$/)) {
+            id = name;
+            const response = await fetch('/ajax/convert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    data: name,
+                    delimiter: ',',
+                    template: '%name%',
+                    type_in: '1',
+                    type_out: '0'
+                })
+            });
+            const resultName = await response.text();
+            name = resultName.trim() || name;
         } else {
-            return { name: '', id: '', hasData: false };
+            const convertedId = await convertNameToId(name);
+            id = convertedId || '';
         }
 
         return { name: name, id: id, hasData: true };
     }
+
+    return { name: '', id: '', hasData: false };
+}
 
     function validateDuration(startTime, endTime, hasPatrol) {
         const [startHour, startMin] = startTime.split(':').map(Number);
@@ -196,6 +210,11 @@
                 <option value="female" ${userData.gender === 'female' ? 'selected' : ''}>Женский</option>
                 <option value="neutral" ${userData.gender === 'neutral' ? 'selected' : ''}>Нейтральный</option>
             </select>
+            <span>Временное имя:</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="user_temp_checkbox" ${userData.isTemp ? 'checked' : ''} style="width: auto;">
+                <label for="user_temp_checkbox" style="font-size: 11px;">(если ваше имя на текущий момент сменено)</label>
+            </div>
         </div>
         <div id="save_status" style="font-size: 11px; margin-top: 5px; text-align: center; color: ${COLORS.success}; display: none;"></div>
         <button id="save_user_btn" style="width: 100%; margin-top: 10px; padding: 5px; background: ${COLORS.bgTabActive}; color: ${COLORS.textDark}; border: none; cursor: pointer; font-family: ${FONT_FAMILY}; font-weight: bold;">Сохранить</button>
@@ -205,38 +224,95 @@
     const nameInput = panel.querySelector('#user_name_input');
     const idInput = panel.querySelector('#user_id_input');
     const genderSelect = panel.querySelector('#user_gender_input');
+    const tempCheckbox = panel.querySelector('#user_temp_checkbox');
     const statusDiv = panel.querySelector('#save_status');
 
     saveBtn.onclick = async () => {
         let name = nameInput.value.trim();
         let id = idInput.value.trim();
-        
+        const isTemp = tempCheckbox.checked;
+
         // Скрываем предыдущее сообщение
         statusDiv.style.display = 'none';
-        
+
+        // Если оба поля пустые
+        if (!name && !id) {
+            statusDiv.textContent = 'Заполните хотя бы одно поле (имя или ID)';
+            statusDiv.style.color = COLORS.warning;
+            statusDiv.style.display = 'block';
+            return;
+        }
+
+        // === ВРЕМЕННОЕ ИМЯ ===
+        if (isTemp) {
+            // Если есть имя, но нет ID
+            if (name && !id) {
+                statusDiv.textContent = 'Постоянное имя сохранено. Не забудьте привязать к нему ID. Пожалуйста, убедитесь, что в имени имени нет опечаток.';
+                statusDiv.style.color = COLORS.warning;
+                statusDiv.style.display = 'block';
+
+                userData.name = name;
+                userData.id = '';
+                userData.gender = genderSelect.value;
+                userData.isTemp = true;
+                saveUserData();
+
+                saveBtn.textContent = 'Сохранено!';
+                setTimeout(() => { saveBtn.textContent = 'Сохранить'; }, 1500);
+                return;
+            }
+
+            // Если есть и имя, и ID
+            if (name && id) {
+                statusDiv.textContent = 'Постоянное имя сохранено. Убедитесь, что ID соответствует имени, а в имени нет опечаток.';
+                statusDiv.style.color = COLORS.warning;
+                statusDiv.style.display = 'block';
+
+                userData.name = name;
+                userData.id = id;
+                userData.gender = genderSelect.value;
+                userData.isTemp = true;
+                saveUserData();
+
+                saveBtn.textContent = 'Сохранено!';
+                setTimeout(() => { saveBtn.textContent = 'Сохранить'; }, 1500);
+                return;
+            }
+
+            // Только ID (без имени)
+            if (id && !name) {
+                statusDiv.textContent = 'Укажите своё постоянное имя (не только ID)';
+                statusDiv.style.color = COLORS.warning;
+                statusDiv.style.display = 'block';
+                return;
+            }
+        }
+
+        // === ПОСТОЯННОЕ ИМЯ (обычная проверка) ===
+
         // Случай 1: заполнили только имя
         if (name && !id) {
-            statusDiv.textContent = '🔍 Ищу ID по имени...';
+            statusDiv.textContent = 'Ищу ID по имени...';
             statusDiv.style.display = 'block';
-            
+
             const convertedId = await convertNameToId(name);
             if (convertedId) {
                 id = convertedId;
                 idInput.value = id;
-                statusDiv.textContent = '✅ ID найден и добавлен!';
+                statusDiv.textContent = 'ID найден и добавлен!';
                 statusDiv.style.color = COLORS.success;
             } else {
-                statusDiv.textContent = '❌ Не удалось найти ID по этому имени. Проверьте имя.';
+                statusDiv.textContent = 'Не удалось найти ID по этому имени. Проверьте имя.';
                 statusDiv.style.color = COLORS.warning;
                 return;
             }
         }
-        
+
         // Случай 2: заполнили только ID
         if (id && !name) {
-            statusDiv.textContent = '🔍 Ищу имя по ID...';
+            statusDiv.textContent = 'Ищу имя по ID...';
             statusDiv.style.display = 'block';
-            
+
             const response = await fetch('/ajax/convert', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -252,23 +328,33 @@
             if (resultName && resultName.trim() && !resultName.includes('link')) {
                 name = resultName.trim();
                 nameInput.value = name;
-                statusDiv.textContent = '✅ Имя найдено и добавлено!';
+                statusDiv.textContent = 'Имя найдено и добавлено!';
                 statusDiv.style.color = COLORS.success;
             } else {
-                statusDiv.textContent = '❌ Не удалось найти имя по этому ID. Проверьте ID.';
+                statusDiv.textContent = 'Не удалось найти имя по этому ID. Проверьте ID.';
                 statusDiv.style.color = COLORS.warning;
                 return;
             }
         }
-        
+
         // Случай 3: заполнили оба поля — проверяем соответствие
         if (name && id) {
-            statusDiv.textContent = '🔍 Проверяем соответствие имени и ID...';
+            statusDiv.textContent = 'Проверяю соответствие имени и ID...';
             statusDiv.style.display = 'block';
-            
+
             const checkId = await convertNameToId(name);
+
+            // Если имя не найдено в системе
+            if (!checkId) {
+                statusDiv.textContent = `Имя "${name}" не найдено в системе. Проверьте правильность написания.`;
+                statusDiv.style.color = COLORS.warning;
+                statusDiv.style.display = 'block';
+                return;
+            }
+
+            // Если имя найдено, но ID не совпадает
             if (checkId && checkId !== id) {
-                statusDiv.textContent = `⚠️ Имя "${name}" соответствует ID ${checkId}. ID исправлен.`;
+                statusDiv.textContent = `Имя "${name}" соответствует ID ${checkId}, а вы ввели ${id}. ID исправлен на ${checkId}.`;
                 statusDiv.style.color = COLORS.warning;
                 id = checkId;
                 idInput.value = id;
@@ -276,43 +362,36 @@
                     statusDiv.style.display = 'none';
                 }, 3000);
             } else {
-                statusDiv.textContent = '✅ Имя и ID соответствуют друг другу!';
+                statusDiv.textContent = 'Имя и ID соответствуют друг другу!';
                 statusDiv.style.color = COLORS.success;
                 setTimeout(() => {
                     statusDiv.style.display = 'none';
                 }, 1500);
             }
         }
-        
-        // Случай 4: оба поля пустые
-        if (!name && !id) {
-            statusDiv.textContent = '❌ Заполните хотя бы одно поле (имя или ID)';
-            statusDiv.style.color = COLORS.warning;
-            statusDiv.style.display = 'block';
-            return;
-        }
-        
-        // Сохраняем данные
+
+        // Сохраняем постоянные данные
         userData.name = name;
         userData.id = id;
         userData.gender = genderSelect.value;
+        userData.isTemp = false;
         saveUserData();
-        
+
         // Обновляем статус
-        if (!statusDiv.textContent.includes('⚠️')) {
-            statusDiv.textContent = '✅ Сохранено!';
+        if (!statusDiv.textContent.includes('⚠️') && !statusDiv.textContent.includes('❌')) {
             statusDiv.style.color = COLORS.success;
             statusDiv.style.display = 'block';
             setTimeout(() => {
                 statusDiv.style.display = 'none';
             }, 1500);
         }
-        
-        saveBtn.textContent = '✅ Сохранено!';
+
+        saveBtn.textContent = 'Сохранено!';
         setTimeout(() => { saveBtn.textContent = 'Сохранить'; }, 1500);
     };
-        return panel;
-    }
+
+    return panel;
+}
 
     function createDozorForm() {
         const div = document.createElement('div');
@@ -389,7 +468,7 @@
         locationType.dispatchEvent(new Event('change'));
 
         div.querySelector('#dozor_submit').onclick = async () => {
-            const userInfo = await getNameAndId(nameInput, userData.name, userData.id);
+            const userInfo = await getNameAndId(nameInput, userData.name, userData.id, userData.isTemp);
 
             if (!userInfo.hasData) {
                 warningDiv.textContent = 'Введите ваше имя или ID в поле выше, либо сохраните данные в разделе "Мои данные"';
@@ -485,7 +564,7 @@
         typeSelect.dispatchEvent(new Event('change'));
 
         div.querySelector('#start_submit').onclick = async () => {
-            const userInfo = await getNameAndId(nameInput, userData.name, userData.id);
+            const userInfo = await getNameAndId(nameInput, userData.name, userData.id, userData.isTemp);
 
             if (!userInfo.hasData) {
                 warningDiv.textContent = 'Введите ваше имя или ID в поле выше, либо сохраните данные в разделе "Мои данные"';
@@ -541,7 +620,7 @@
         }
 
         div.querySelector('#patrol_submit').onclick = async () => {
-            const userInfo = await getNameAndId(nameInput, userData.name, userData.id);
+            const userInfo = await getNameAndId(nameInput, userData.name, userData.id, userData.isTemp);
 
             if (!userInfo.hasData) {
                 warningDiv.textContent = 'Введите ваше имя или ID в поле выше, либо сохраните данные в разделе "Мои данные"';
@@ -591,7 +670,7 @@
         }
 
         div.querySelector('#violator_submit').onclick = async () => {
-            const userInfo = await getNameAndId(nameInput, userData.name, userData.id);
+            const userInfo = await getNameAndId(nameInput, userData.name, userData.id, userData.isTemp);
 
             if (!userInfo.hasData) {
                 warningDiv.textContent = 'Введите ваше имя или ID в поле выше, либо сохраните данные в разделе "Мои данные"';
